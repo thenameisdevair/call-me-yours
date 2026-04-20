@@ -1,3 +1,16 @@
-.env*\nnode_modules/\n.next/\ndist/\n.impeccable.md
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+dist/
+.impeccable.md
 .claude/skills/impeccable
 my-celo-app
+out/
+cache/
+broadcast/
+apps/contracts/out/
+apps/contracts/cache/
+apps/contracts/broadcast/
+apps/contracts/.env
