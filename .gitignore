@@ -10,3 +10,7 @@ my-celo-app
 out/
 cache/
 broadcast/
+apps/contracts/out/
+apps/contracts/cache/
+apps/contracts/broadcast/
+apps/contracts/.env
