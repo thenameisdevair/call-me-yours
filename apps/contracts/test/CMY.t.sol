@@ -69,15 +69,15 @@ contract CMYTest is Test {
     );
 
     function setUp() public {
-        // Deploy MockUSDM then etch its runtime code at CMY.USDM so the
-        // hard-coded constant address behaves like our mock in-test.
+        // Etch MockUSDM at a deterministic slot; pass that address to the
+        // CMY constructor so the contract talks to our in-memory mock.
         MockUSDM template = new MockUSDM();
         address usdmAddr = 0x765DE816845861e75A25fCA122bb6898B8B1282a;
         vm.etch(usdmAddr, address(template).code);
         usdm = MockUSDM(usdmAddr);
 
         vm.prank(owner);
-        cmy = new CMY(platform, INITIAL_FEE);
+        cmy = new CMY(platform, INITIAL_FEE, usdmAddr);
 
         vm.prank(owner);
         cmy.updateMinGiftPrice(GF_02, GIFT_MIN);
@@ -365,7 +365,12 @@ contract CMYTest is Test {
 
     function test_constructor_revert_zeroPlatformWallet() public {
         vm.expectRevert(CMY.ZeroAddress.selector);
-        new CMY(address(0), INITIAL_FEE);
+        new CMY(address(0), INITIAL_FEE, address(usdm));
+    }
+
+    function test_constructor_revert_zeroUsdm() public {
+        vm.expectRevert(CMY.ZeroAddress.selector);
+        new CMY(platform, INITIAL_FEE, address(0));
     }
 
     function test_matchId_isSymmetric() public {

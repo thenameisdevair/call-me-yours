@@ -16,8 +16,8 @@ contract CMY is ReentrancyGuard, Ownable {
     // Constants
     // -------------------------------------------------------------------------
 
-    /// @notice USDm token on Celo mainnet (Mento stablecoin).
-    address public constant USDM = 0x765DE816845861e75A25fCA122bb6898B8B1282a;
+    /// @notice USDm token (Mento stablecoin). Set per-network at deploy time.
+    address public immutable USDM;
 
     /// @notice 30-day cooldown before a declined sender may re-request the same recipient.
     uint256 public constant REQUEST_COOLDOWN = 30 days;
@@ -117,10 +117,13 @@ contract CMY is ReentrancyGuard, Ownable {
 
     /// @param _platformWallet Address that receives connection fees.
     /// @param _initialConnectionFee Initial connection fee in USDm (18 decimals).
-    constructor(address _platformWallet, uint256 _initialConnectionFee) Ownable(msg.sender) {
+    /// @param _usdm USDm token address for the target network.
+    constructor(address _platformWallet, uint256 _initialConnectionFee, address _usdm) Ownable(msg.sender) {
         if (_platformWallet == address(0)) revert ZeroAddress();
+        if (_usdm == address(0)) revert ZeroAddress();
         platformWallet = _platformWallet;
         connectionFee = _initialConnectionFee;
+        USDM = _usdm;
     }
 
     // -------------------------------------------------------------------------
