@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node .agents/skills/impeccable/scripts/cleanup-deprecated.mjs)"
+      "Bash(node .agents/skills/impeccable/scripts/cleanup-deprecated.mjs)",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('broadcast/Deploy.s.sol/11142220/run-latest.json'\\)\\); [print\\(t['transactionType'], t.get\\('contractName'\\), t.get\\('contractAddress'\\), t['hash']\\) for t in d['transactions']]\")"
     ]
   }
 }
