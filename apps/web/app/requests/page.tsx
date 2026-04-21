@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, Loader2, X } from "lucide-react";
+import { ArrowLeft, Check, Heart, Loader2, MessageCircle, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -31,6 +31,11 @@ export default function RequestsPage() {
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState<Busy>(null);
     const [actionError, setActionError] = useState<string | null>(null);
+    const [justMatched, setJustMatched] = useState<{
+        matchId: string;
+        partner: Profile | null;
+        partnerAddr: string;
+    } | null>(null);
 
     const load = useCallback(async () => {
         if (!me) return;
@@ -94,11 +99,15 @@ export default function RequestsPage() {
             const [userA, userB] =
                 req.sender.toLowerCase() < me ? [req.sender, me] : [me, req.sender];
 
-            const { error: insertErr } = await supabase.from("matches").insert({
-                user_a: userA.toLowerCase(),
-                user_b: userB.toLowerCase(),
-                tx_hash: txHash,
-            });
+            const { data: inserted, error: insertErr } = await supabase
+                .from("matches")
+                .insert({
+                    user_a: userA.toLowerCase(),
+                    user_b: userB.toLowerCase(),
+                    tx_hash: txHash,
+                })
+                .select("id")
+                .single();
             if (insertErr) throw insertErr;
 
             const { error: updErr } = await supabase
@@ -110,7 +119,13 @@ export default function RequestsPage() {
                 .eq("id", req.id);
             if (updErr) throw updErr;
 
-            router.push("/matches");
+            const accepted = items.find((x) => x.request.id === req.id);
+            setItems((xs) => xs.filter((x) => x.request.id !== req.id));
+            setJustMatched({
+                matchId: inserted.id,
+                partner: accepted?.sender ?? null,
+                partnerAddr: req.sender.toLowerCase(),
+            });
         } catch (e) {
             const msg = e instanceof Error ? e.message : "Could not accept";
             if (!/reject|denied|cancel/i.test(msg)) setActionError(msg);
@@ -148,6 +163,17 @@ export default function RequestsPage() {
     }
 
     const initialLoading = walletLoading || (loading && items.length === 0);
+
+    if (justMatched) {
+        return (
+            <MatchCelebration
+                partner={justMatched.partner}
+                partnerAddr={justMatched.partnerAddr}
+                onChat={() => router.push(`/chat/${justMatched.matchId}`)}
+                onKeep={() => setJustMatched(null)}
+            />
+        );
+    }
 
     return (
         <main className="min-h-dvh bg-background">
@@ -281,4 +307,90 @@ export default function RequestsPage() {
 
 function shorten(addr: string): string {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+function MatchCelebration({
+    partner,
+    partnerAddr,
+    onChat,
+    onKeep,
+}: {
+    partner: Profile | null;
+    partnerAddr: string;
+    onChat: () => void;
+    onKeep: () => void;
+}) {
+    const name = partner?.display_name ?? shorten(partnerAddr);
+    const photo = partner?.photos?.[0];
+    const confetti = [
+        { dx: "-80px", dy: "-140px", r: "-40deg", d: "0ms", ch: "✦" },
+        { dx: "84px", dy: "-160px", r: "60deg", d: "80ms", ch: "❤" },
+        { dx: "-20px", dy: "-200px", r: "10deg", d: "40ms", ch: "✿" },
+        { dx: "64px", dy: "-120px", r: "180deg", d: "120ms", ch: "★" },
+        { dx: "-96px", dy: "-90px", r: "-120deg", d: "160ms", ch: "✧" },
+        { dx: "100px", dy: "-80px", r: "45deg", d: "200ms", ch: "❤" },
+    ];
+    return (
+        <main className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-primary/10 via-background to-background px-6 text-center">
+            <div className="pointer-events-none absolute inset-x-0 top-1/3 flex justify-center">
+                {confetti.map((c, i) => (
+                    <span
+                        key={i}
+                        aria-hidden
+                        className="animate-confetti absolute text-xl"
+                        style={{
+                            // @ts-expect-error css vars
+                            "--dx": c.dx,
+                            "--dy": c.dy,
+                            "--r": c.r,
+                            animationDelay: c.d,
+                            animationDuration: "1800ms",
+                        }}
+                    >
+                        {c.ch}
+                    </span>
+                ))}
+            </div>
+
+            <div className="animate-pop flex items-center gap-3">
+                <div className="h-20 w-20 overflow-hidden rounded-full border-4 border-background bg-muted shadow-lg">
+                    {photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={photo} alt={name} className="h-full w-full object-cover" />
+                    ) : (
+                        <div className="flex h-full w-full items-center justify-center font-serif text-3xl text-muted-foreground">
+                            {name.slice(0, 1).toUpperCase()}
+                        </div>
+                    )}
+                </div>
+                <Heart className="animate-float h-8 w-8 fill-primary text-primary" />
+            </div>
+
+            <h1 className="animate-rise mt-6 font-serif text-5xl leading-tight">
+                It&apos;s a match
+            </h1>
+            <p className="animate-rise mt-3 max-w-xs text-sm text-muted-foreground">
+                You and {name} said yes. Send the first message — take your time, say
+                something real.
+            </p>
+
+            <div className="animate-rise mt-8 flex w-full max-w-xs flex-col gap-3">
+                <button
+                    type="button"
+                    onClick={onChat}
+                    className="flex h-12 items-center justify-center gap-2 rounded-xl bg-primary text-base font-semibold text-primary-foreground transition hover:opacity-90"
+                >
+                    <MessageCircle className="h-5 w-5" />
+                    Say hello
+                </button>
+                <button
+                    type="button"
+                    onClick={onKeep}
+                    className="text-sm text-muted-foreground underline-offset-2 hover:underline"
+                >
+                    Keep browsing requests
+                </button>
+            </div>
+        </main>
+    );
 }

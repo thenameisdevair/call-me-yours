@@ -6,11 +6,16 @@
     :root {
         --background: 36 33% 97%;
         --foreground: 20 14% 12%;
-        --muted: 30 15% 90%;
-        --muted-foreground: 20 9% 40%;
+        --card: 36 40% 99%;
+        --card-foreground: 20 14% 12%;
+        --muted: 30 15% 92%;
+        --muted-foreground: 20 9% 38%;
         --primary: 354 70% 54%;
         --primary-foreground: 36 33% 97%;
-        --border: 30 15% 85%;
+        --accent: 30 70% 60%;
+        --accent-foreground: 20 14% 12%;
+        --border: 30 18% 86%;
+        --ring: 354 70% 54%;
         --radius: 0.75rem;
     }
 }
@@ -18,8 +23,66 @@
 @layer base {
     * {
         @apply border-border;
+        -webkit-tap-highlight-color: transparent;
+    }
+    html {
+        -webkit-text-size-adjust: 100%;
     }
     body {
         @apply bg-background text-foreground antialiased;
+        font-feature-settings: "ss01", "cv11";
+        text-rendering: optimizeLegibility;
+    }
+    h1, h2, h3 {
+        @apply font-serif tracking-tight;
+    }
+    input, textarea, button {
+        @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-0;
+    }
+}
+
+@layer utilities {
+    .animate-rise {
+        animation: rise 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .animate-pop {
+        animation: pop 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .animate-sheen {
+        animation: sheen 1800ms ease-out 120ms both;
+    }
+    .animate-float {
+        animation: float 2400ms ease-in-out infinite;
+    }
+    .animate-confetti {
+        animation: confetti 1400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    @keyframes rise {
+        from { opacity: 0; transform: translateY(16px) scale(0.98); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes pop {
+        0%   { opacity: 0; transform: scale(0.6); }
+        60%  { opacity: 1; transform: scale(1.08); }
+        100% { opacity: 1; transform: scale(1); }
+    }
+    @keyframes sheen {
+        from { transform: translateX(-120%) skewX(-12deg); opacity: 0; }
+        40%  { opacity: 0.55; }
+        to   { transform: translateX(220%) skewX(-12deg); opacity: 0; }
+    }
+    @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50%      { transform: translateY(-4px); }
+    }
+    @keyframes confetti {
+        0%   { opacity: 0; transform: translate(0, 0) rotate(0deg); }
+        20%  { opacity: 1; }
+        100% { opacity: 0; transform: translate(var(--dx, 0), var(--dy, -80px)) rotate(var(--r, 120deg)); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .animate-rise, .animate-pop, .animate-sheen, .animate-float, .animate-confetti {
+            animation: none !important;
+        }
     }
 }
