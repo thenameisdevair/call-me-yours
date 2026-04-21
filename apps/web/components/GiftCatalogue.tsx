@@ -295,19 +295,52 @@ function SuccessBody({
     gift: Gift | null;
     onClose: () => void;
 }) {
+    const confetti = [
+        { dx: "-48px", dy: "-96px", r: "-40deg", delay: "0ms" },
+        { dx: "52px", dy: "-110px", r: "60deg", delay: "60ms" },
+        { dx: "-12px", dy: "-140px", r: "10deg", delay: "30ms" },
+        { dx: "36px", dy: "-72px", r: "180deg", delay: "100ms" },
+        { dx: "-60px", dy: "-60px", r: "-120deg", delay: "140ms" },
+    ];
     return (
-        <div className="flex flex-col items-center gap-3 py-4 text-center">
-            <CheckCircle2 className="h-10 w-10 text-primary" />
+        <div className="relative flex flex-col items-center gap-3 py-4 text-center">
+            <div className="pointer-events-none absolute inset-x-0 top-6 flex justify-center">
+                {confetti.map((c, i) => (
+                    <span
+                        key={i}
+                        aria-hidden
+                        className="animate-confetti absolute text-lg"
+                        style={{
+                            // @ts-expect-error css vars
+                            "--dx": c.dx,
+                            "--dy": c.dy,
+                            "--r": c.r,
+                            animationDelay: c.delay,
+                        }}
+                    >
+                        {["✦", "✧", "❤", "✿", "★"][i]}
+                    </span>
+                ))}
+            </div>
+            <div className="animate-pop relative">
+                {gift ? (
+                    <span className="text-5xl" aria-hidden>
+                        {gift.emoji}
+                    </span>
+                ) : (
+                    <CheckCircle2 className="h-10 w-10 text-primary" />
+                )}
+            </div>
             <h3 className="font-serif text-3xl">Gift sent</h3>
             {gift && (
                 <p className="text-sm text-muted-foreground">
-                    {gift.emoji} {gift.name} — {gift.priceDisplay} USDm landed.
+                    {gift.name} — {gift.priceDisplay} USDm is on its way.
                 </p>
             )}
             <button
                 type="button"
                 onClick={onClose}
-                className="mt-1 h-11 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground"
+                className="mt-1 h-11 w-full rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
             >
                 Back to chat
             </button>

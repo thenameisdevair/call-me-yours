@@ -343,8 +343,17 @@ export default function ChatPage() {
                     <>
                         <ul className="flex flex-1 flex-col gap-2">
                             {messages.length === 0 ? (
-                                <li className="mt-10 text-center text-sm text-muted-foreground">
-                                    Say something thoughtful.
+                                <li className="mt-16 flex flex-col items-center gap-2 text-center">
+                                    <span className="text-3xl" aria-hidden>
+                                        ✿
+                                    </span>
+                                    <p className="font-serif text-xl">
+                                        Say something real
+                                    </p>
+                                    <p className="max-w-xs text-xs text-muted-foreground">
+                                        A thoughtful first line goes a long way.
+                                        Encrypted end-to-end.
+                                    </p>
                                 </li>
                             ) : (
                                 messages.map((m) =>
