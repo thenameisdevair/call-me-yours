@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowLeft, Loader2, Send } from "lucide-react";
+import { ArrowLeft, Gift as GiftIcon, Loader2, Send } from "lucide-react";
+import type { Address } from "viem";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -20,15 +21,28 @@ import { useXMTP } from "@/hooks/useXMTP";
 import { useChatSession } from "@/hooks/useChatSession";
 import { useMilestones } from "@/hooks/useMilestones";
 import { MilestoneNotification } from "@/components/MilestoneNotification";
+import { GiftCatalogue } from "@/components/GiftCatalogue";
+import { GiftMessage } from "@/components/GiftMessage";
+import { decodeGiftMessage, encodeGiftMessage } from "@/constants/gifts";
 import { getSupabase } from "@/lib/supabase";
 import type { Match, Profile } from "@/lib/database.types";
 
-interface ChatMessage {
-    id: string;
-    text: string;
-    fromMe: boolean;
-    sentAt: Date;
-}
+type ChatMessage =
+    | {
+          kind: "text";
+          id: string;
+          text: string;
+          fromMe: boolean;
+          sentAt: Date;
+      }
+    | {
+          kind: "gift";
+          id: string;
+          giftId: string;
+          amountWei: bigint;
+          fromMe: boolean;
+          sentAt: Date;
+      };
 
 export default function ChatPage() {
     const router = useRouter();
@@ -61,6 +75,21 @@ export default function ChatPage() {
         dismissMilestone,
         fulfillMilestone,
     } = useMilestones(matchId);
+
+    const [giftOpen, setGiftOpen] = useState(false);
+    // When the catalogue is opened from a milestone notification, remember
+    // which milestone this send is fulfilling so the hook can mark the row
+    // and record it on-chain.
+    const [fulfillingMilestoneId, setFulfillingMilestoneId] = useState<
+        string | null
+    >(null);
+
+    const partnerAddress: Address | null = useMemo(() => {
+        if (!match || !me) return null;
+        const addr =
+            match.user_a.toLowerCase() === me ? match.user_b : match.user_a;
+        return addr as Address;
+    }, [match, me]);
 
     // Match-gated access: verify the signed-in wallet is one of the two
     // users on the match. If not, kick them back to /matches.
@@ -318,18 +347,28 @@ export default function ChatPage() {
                                     Say something thoughtful.
                                 </li>
                             ) : (
-                                messages.map((m) => (
-                                    <li
-                                        key={m.id}
-                                        className={
-                                            m.fromMe
-                                                ? "self-end max-w-[80%] rounded-2xl rounded-br-sm bg-primary px-4 py-2 text-sm text-primary-foreground"
-                                                : "self-start max-w-[80%] rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-2 text-sm"
-                                        }
-                                    >
-                                        {m.text}
-                                    </li>
-                                ))
+                                messages.map((m) =>
+                                    m.kind === "gift" ? (
+                                        <li key={m.id} className="contents">
+                                            <GiftMessage
+                                                giftId={m.giftId}
+                                                amountWei={m.amountWei}
+                                                fromMe={m.fromMe}
+                                            />
+                                        </li>
+                                    ) : (
+                                        <li
+                                            key={m.id}
+                                            className={
+                                                m.fromMe
+                                                    ? "self-end max-w-[80%] rounded-2xl rounded-br-sm bg-primary px-4 py-2 text-sm text-primary-foreground"
+                                                    : "self-start max-w-[80%] rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-2 text-sm"
+                                            }
+                                        >
+                                            {m.text}
+                                        </li>
+                                    )
+                                )
                             )}
                             <div ref={bottomRef} />
                         </ul>
@@ -342,15 +381,52 @@ export default function ChatPage() {
                 )}
             </div>
 
-            {pendingMilestones.length > 0 && (
+            {pendingMilestones.length > 0 && !giftOpen && (
                 <div className="pointer-events-none fixed inset-x-0 bottom-24 z-20 flex justify-center px-4">
                     <MilestoneNotification
                         milestone={pendingMilestones[0]}
-                        onFulfill={fulfillMilestone}
+                        onFulfill={(id) => {
+                            setFulfillingMilestoneId(id);
+                            setGiftOpen(true);
+                            fulfillMilestone(id);
+                        }}
                         onDismiss={dismissMilestone}
                     />
                 </div>
             )}
+
+            <GiftCatalogue
+                open={giftOpen}
+                onClose={() => {
+                    setGiftOpen(false);
+                    setFulfillingMilestoneId(null);
+                }}
+                sender={(me as Address | null) ?? null}
+                recipient={partnerAddress}
+                matchId={matchId}
+                recipientName={partnerName || "them"}
+                fulfillMilestoneId={fulfillingMilestoneId}
+                onSent={async ({ gift, txHash, amountWei }) => {
+                    // Surface the gift inside the E2E-encrypted thread. We
+                    // encode a structured payload so the receiving client
+                    // renders GiftMessage instead of a JSON blob.
+                    if (!dm) return;
+                    try {
+                        const payload = encodeGiftMessage(
+                            gift.id,
+                            txHash,
+                            amountWei
+                        );
+                        await dm.sendText(payload);
+                    } catch (e) {
+                        console.warn(
+                            "gift xmtp send failed",
+                            e instanceof Error ? e.message : e
+                        );
+                    }
+                }}
+            />
+
 
             {partnerOnXmtp && (
                 <div className="sticky bottom-0 border-t border-border bg-background/95 p-3 backdrop-blur">
@@ -361,6 +437,17 @@ export default function ChatPage() {
                             if (canSend) onSend();
                         }}
                     >
+                        <button
+                            type="button"
+                            aria-label="Send a gift"
+                            onClick={() => {
+                                setFulfillingMilestoneId(null);
+                                setGiftOpen(true);
+                            }}
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border text-primary hover:border-primary"
+                        >
+                            <GiftIcon className="h-4 w-4" />
+                        </button>
                         <input
                             type="text"
                             value={draft}
@@ -407,12 +494,27 @@ function decode(
     msg: DecodedMessage,
     myInboxId: string | undefined
 ): ChatMessage | null {
-    // V1 scope: text only. Drop system / non-string content silently.
+    // V1 scope: text and gifts. Gifts are JSON-wrapped text payloads that
+    // XMTP still E2E-encrypts — see encodeGiftMessage. Drop non-string
+    // content silently.
     if (typeof msg.content !== "string") return null;
+    const fromMe = Boolean(myInboxId && msg.senderInboxId === myInboxId);
+    const gift = decodeGiftMessage(msg.content);
+    if (gift) {
+        return {
+            kind: "gift",
+            id: msg.id,
+            giftId: gift.id,
+            amountWei: BigInt(gift.amountWei),
+            fromMe,
+            sentAt: msg.sentAt,
+        };
+    }
     return {
+        kind: "text",
         id: msg.id,
         text: msg.content,
-        fromMe: Boolean(myInboxId && msg.senderInboxId === myInboxId),
+        fromMe,
         sentAt: msg.sentAt,
     };
 }
