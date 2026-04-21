@@ -37,9 +37,9 @@ export default function ProfileCard({ profile, priority = false }: ProfileCardPr
                 </div>
             )}
 
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-4">
-                <div className="flex items-baseline gap-2 text-white">
-                    <h3 className="font-serif text-2xl leading-tight">
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent p-4">
+                <div className="flex items-baseline gap-2 text-white drop-shadow-sm">
+                    <h3 className="font-serif text-2xl leading-tight tracking-tight">
                         {profile.display_name}
                     </h3>
                     <span className="text-base opacity-90">{profile.age}</span>

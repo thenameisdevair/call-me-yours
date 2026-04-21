@@ -25,8 +25,11 @@ export function MilestoneNotification({
             role="dialog"
             aria-live="polite"
             aria-label={`Milestone reached: ${def.name}`}
-            className="pointer-events-auto w-full max-w-sm overflow-hidden rounded-3xl border border-primary/20 bg-card shadow-2xl"
+            className="animate-rise pointer-events-auto relative w-full max-w-sm overflow-hidden rounded-3xl border border-primary/20 bg-card shadow-2xl"
         >
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                <div className="animate-sheen absolute -inset-y-8 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+            </div>
             <div className="relative bg-gradient-to-br from-primary/15 via-primary/5 to-transparent px-5 pb-4 pt-6">
                 <button
                     type="button"
@@ -37,7 +40,7 @@ export function MilestoneNotification({
                     <X className="h-4 w-4" />
                 </button>
                 <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-primary">
-                    <Sparkles className="h-4 w-4" />
+                    <Sparkles className="animate-float h-4 w-4" />
                     <span>Milestone reached</span>
                 </div>
                 <div className="mt-2 font-serif text-3xl leading-tight">
