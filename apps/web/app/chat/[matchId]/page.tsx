@@ -18,6 +18,8 @@ import {
 import { useMiniPay } from "@/hooks/useMiniPay";
 import { useXMTP } from "@/hooks/useXMTP";
 import { useChatSession } from "@/hooks/useChatSession";
+import { useMilestones } from "@/hooks/useMilestones";
+import { MilestoneNotification } from "@/components/MilestoneNotification";
 import { getSupabase } from "@/lib/supabase";
 import type { Match, Profile } from "@/lib/database.types";
 
@@ -53,6 +55,12 @@ export default function ChatPage() {
     const bottomRef = useRef<HTMLDivElement | null>(null);
 
     const { recordMessageSent } = useChatSession(matchId);
+    const {
+        pendingMilestones,
+        checkMilestones: checkMilestonesNow,
+        dismissMilestone,
+        fulfillMilestone,
+    } = useMilestones(matchId);
 
     // Match-gated access: verify the signed-in wallet is one of the two
     // users on the match. If not, kick them back to /matches.
@@ -218,12 +226,16 @@ export default function ChatPage() {
             setDraft("");
             // Session metadata only — never content.
             await recordMessageSent();
+            // Evaluate milestones after the session row is updated. The
+            // engine is idempotent and writes use a unique constraint, so
+            // it is safe to call on every send.
+            void checkMilestonesNow();
         } catch (e) {
             setConvoError(e instanceof Error ? e.message : "Could not send");
         } finally {
             setSending(false);
         }
-    }, [dm, draft, recordMessageSent]);
+    }, [dm, draft, recordMessageSent, checkMilestonesNow]);
 
     const partnerName =
         partner?.display_name ??
@@ -329,6 +341,16 @@ export default function ChatPage() {
                     </>
                 )}
             </div>
+
+            {pendingMilestones.length > 0 && (
+                <div className="pointer-events-none fixed inset-x-0 bottom-24 z-20 flex justify-center px-4">
+                    <MilestoneNotification
+                        milestone={pendingMilestones[0]}
+                        onFulfill={fulfillMilestone}
+                        onDismiss={dismissMilestone}
+                    />
+                </div>
+            )}
 
             {partnerOnXmtp && (
                 <div className="sticky bottom-0 border-t border-border bg-background/95 p-3 backdrop-blur">
