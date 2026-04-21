@@ -46,6 +46,7 @@ export interface Database {
                     updated_at?: string;
                 };
                 Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
+                Relationships: [];
             };
             matches: {
                 Row: {
@@ -65,6 +66,7 @@ export interface Database {
                     tx_hash?: string | null;
                 };
                 Update: Partial<Database["public"]["Tables"]["matches"]["Insert"]>;
+                Relationships: [];
             };
             connection_requests: {
                 Row: {
@@ -86,6 +88,7 @@ export interface Database {
                     responded_at?: string | null;
                 };
                 Update: Partial<Database["public"]["Tables"]["connection_requests"]["Insert"]>;
+                Relationships: [];
             };
             chat_sessions: {
                 Row: {
@@ -103,6 +106,7 @@ export interface Database {
                     created_at?: string;
                 };
                 Update: Partial<Database["public"]["Tables"]["chat_sessions"]["Insert"]>;
+                Relationships: [];
             };
             milestones: {
                 Row: {
@@ -124,6 +128,7 @@ export interface Database {
                     gift_tx_hash?: string | null;
                 };
                 Update: Partial<Database["public"]["Tables"]["milestones"]["Insert"]>;
+                Relationships: [];
             };
             reports: {
                 Row: {
@@ -143,6 +148,7 @@ export interface Database {
                     resolved?: boolean;
                 };
                 Update: Partial<Database["public"]["Tables"]["reports"]["Insert"]>;
+                Relationships: [];
             };
         };
         Views: Record<string, never>;
