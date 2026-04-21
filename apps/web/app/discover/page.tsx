@@ -1,15 +1,18 @@
 "use client";
 
-import { Loader2, RefreshCw } from "lucide-react";
+import { Inbox, Loader2, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef } from "react";
 import ProfileCard from "@/components/ProfileCard";
 import { useMiniPay } from "@/hooks/useMiniPay";
+import { usePendingRequestCount } from "@/hooks/usePendingRequestCount";
 import { useProfiles } from "@/hooks/useProfiles";
 
 export default function DiscoverPage() {
     const { address, isLoading: walletLoading } = useMiniPay();
     const { profiles, isLoading, isRefreshing, hasMore, error, loadMore, refresh } =
         useProfiles(address?.toLowerCase());
+    const pendingCount = usePendingRequestCount(address?.toLowerCase());
 
     const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -40,17 +43,35 @@ export default function DiscoverPage() {
                             Take your time. Tap anyone to learn more.
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={refresh}
-                        disabled={isRefreshing || isLoading}
-                        aria-label="Refresh feed"
-                        className="flex h-10 w-10 items-center justify-center rounded-full border border-border text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-50"
-                    >
-                        <RefreshCw
-                            className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
-                        />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <Link
+                            href="/requests"
+                            aria-label={
+                                pendingCount > 0
+                                    ? `Requests (${pendingCount} pending)`
+                                    : "Requests"
+                            }
+                            className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border text-muted-foreground transition hover:border-primary hover:text-primary"
+                        >
+                            <Inbox className="h-4 w-4" />
+                            {pendingCount > 0 && (
+                                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                                    {pendingCount > 99 ? "99+" : pendingCount}
+                                </span>
+                            )}
+                        </Link>
+                        <button
+                            type="button"
+                            onClick={refresh}
+                            disabled={isRefreshing || isLoading}
+                            aria-label="Refresh feed"
+                            className="flex h-10 w-10 items-center justify-center rounded-full border border-border text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-50"
+                        >
+                            <RefreshCw
+                                className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                            />
+                        </button>
+                    </div>
                 </header>
 
                 {error && (

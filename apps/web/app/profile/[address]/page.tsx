@@ -1,8 +1,11 @@
 "use client";
 
-import { ArrowLeft, ChevronLeft, ChevronRight, Heart, Loader2 } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import type { Address } from "viem";
+import ConnectionButton from "@/components/ConnectionButton";
+import { useMiniPay } from "@/hooks/useMiniPay";
 import { getSupabase } from "@/lib/supabase";
 import type { Profile } from "@/lib/database.types";
 
@@ -12,10 +15,13 @@ export default function ProfileDetailPage() {
     const rawAddress = typeof params?.address === "string" ? params.address : "";
     const address = rawAddress.toLowerCase();
 
+    const { address: viewerAddress } = useMiniPay();
+
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [photoIdx, setPhotoIdx] = useState(0);
+    const [alreadyRequested, setAlreadyRequested] = useState(false);
     const trackRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -50,6 +56,24 @@ export default function ProfileDetailPage() {
             cancelled = true;
         };
     }, [address]);
+
+    useEffect(() => {
+        if (!viewerAddress || !address) return;
+        let cancelled = false;
+        (async () => {
+            const supabase = getSupabase();
+            const { data } = await supabase
+                .from("connection_requests")
+                .select("id")
+                .eq("sender", viewerAddress.toLowerCase())
+                .eq("recipient", address)
+                .limit(1);
+            if (!cancelled) setAlreadyRequested((data?.length ?? 0) > 0);
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [viewerAddress, address]);
 
     const photos = profile?.photos ?? [];
     const hasMultiple = photos.length > 1;
@@ -188,18 +212,12 @@ export default function ProfileDetailPage() {
 
             <div className="fixed inset-x-0 bottom-0 border-t border-border/60 bg-background/90 backdrop-blur-md">
                 <div className="mx-auto flex max-w-md items-center gap-3 px-5 py-4">
-                    <button
-                        type="button"
-                        onClick={() => {
-                            // Connection request flow is wired in Step 7.
-                            // For Step 6 we stub this as a visible no-op.
-                            alert("Connection requests arrive in the next step.");
-                        }}
-                        className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary text-base font-semibold text-primary-foreground transition hover:opacity-90"
-                    >
-                        <Heart className="h-5 w-5" />
-                        Connect
-                    </button>
+                    <ConnectionButton
+                        sender={viewerAddress as Address | null}
+                        recipient={address as Address}
+                        recipientName={profile.display_name}
+                        alreadyRequested={alreadyRequested}
+                    />
                 </div>
             </div>
         </main>
