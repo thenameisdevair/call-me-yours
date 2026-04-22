@@ -20,7 +20,7 @@ export const USDM_ADDRESS =
 
 export const USDM_ADAPTER =
     (process.env.NEXT_PUBLIC_USDM_ADAPTER as Address) ??
-    "0x2F25deB3848C207fc8E0c34035B3Ba7fC157602B";
+    "0x765DE816845861e75A25fCA122bb6898B8B1282a";
 
 const RPC = process.env.NEXT_PUBLIC_CELO_RPC ?? "https://forno.celo.org";
 
