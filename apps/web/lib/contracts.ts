@@ -84,20 +84,40 @@ export const USDM_ERC20_ABI = [
 
 // All writes use legacy tx + feeCurrency USDM_ADAPTER so users pay gas in
 // USDm. This is the CMY non-negotiable rule.
+//
+// DEBUG: `skipFeeCurrency` lets a single caller (acceptRequest) omit the
+// feeCurrency field so gas is paid in CELO. Temporary — remove once the
+// "Permission denied" investigation is closed.
 async function writeContract(
     account: Address,
     address: Address,
     data: `0x${string}`,
+    opts: { skipFeeCurrency?: boolean } = {},
 ): Promise<Hash> {
     const wallet = getWalletClient();
-    return wallet.sendTransaction({
+    const tx = {
         account,
         chain: celo,
         to: address,
         data,
-        type: "legacy",
-        feeCurrency: USDM_ADAPTER,
+        type: "legacy" as const,
+        ...(opts.skipFeeCurrency ? {} : { feeCurrency: USDM_ADAPTER }),
+    };
+    // DEBUG: dump the full transaction request before handing it to the
+    // wallet. Stringify to expand so BigInt values don't collapse to
+    // "[object Object]" in some browsers. Remove with the skipFeeCurrency
+    // flag once debugging is done.
+    // eslint-disable-next-line no-console
+    console.log("[writeContract] sending tx:", {
+        account: tx.account,
+        chain: tx.chain.id,
+        to: tx.to,
+        data: tx.data,
+        type: tx.type,
+        feeCurrency: "feeCurrency" in tx ? tx.feeCurrency : "<omitted (CELO gas)>",
+        skipFeeCurrency: Boolean(opts.skipFeeCurrency),
     });
+    return wallet.sendTransaction(tx);
 }
 
 export async function approveUSDm(account: Address, amount: bigint): Promise<Hash> {
@@ -133,7 +153,12 @@ export async function acceptRequest(account: Address, sender: Address): Promise<
         functionName: "acceptRequest",
         args: [getAddress(sender)],
     });
-    return writeContract(getAddress(account), CMY_ADDRESS, data);
+    // DEBUG: omit feeCurrency so gas is paid in CELO. If this succeeds, the
+    // "Permission denied" on the USDm path is a fee-currency issue, not a
+    // contract revert. Revert this flag before shipping.
+    return writeContract(getAddress(account), CMY_ADDRESS, data, {
+        skipFeeCurrency: true,
+    });
 }
 
 export async function declineRequest(account: Address, sender: Address): Promise<Hash> {
