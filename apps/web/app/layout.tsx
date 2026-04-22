@@ -19,6 +19,10 @@ const jakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
     title: "Call Me Yours",
     description: "Dating on MiniPay — real people, real connections.",
+    other: {
+        "talentapp:project_verification":
+            "3a416d44d835627d8f9ba16f64399c8f6bd32cf891ca31c1f477ca9254c77e7ce13ca62c154bbb066db312d4385a37f750466320b9ba3ffe7a0b699a92795ecb",
+    },
 };
 
 export const viewport: Viewport = {
