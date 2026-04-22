@@ -85,15 +85,41 @@ export const USDM_ERC20_ABI = [
 // All writes use legacy tx + feeCurrency USDM_ADAPTER so users pay gas in
 // USDm. This is the CMY non-negotiable rule.
 //
-// DEBUG: `skipFeeCurrency` lets a single caller (acceptRequest) omit the
-// feeCurrency field so gas is paid in CELO. Temporary — remove once the
-// "Permission denied" investigation is closed.
+// "Permission denied" (EIP-1193 code 4100 / viem UnauthorizedProviderError)
+// from MiniPay means the provider hasn't authorized the `from` account for
+// eth_sendTransaction. useMiniPay only calls eth_requestAccounts once at
+// mount; if the session drifts (chain switch, long-lived tab, wallet-side
+// re-auth) the cached address becomes stale. Before every write we re-query
+// the provider's live accounts and fail fast with a clear message if the
+// caller's account isn't the one the wallet currently authorizes. This also
+// re-primes MiniPay for the pending sendTransaction call on wallets that
+// scope authorization per-request.
 async function writeContract(
     account: Address,
     address: Address,
     data: `0x${string}`,
-    opts: { skipFeeCurrency?: boolean } = {},
 ): Promise<Hash> {
+    if (typeof window === "undefined" || !window.ethereum) {
+        throw new Error("No injected wallet found");
+    }
+
+    // Re-auth & verify the live account matches what we're about to sign for.
+    const live = (await window.ethereum.request({
+        method: "eth_requestAccounts",
+    })) as string[];
+    const liveAddr = (live?.[0] ?? "").toLowerCase();
+    const wanted = account.toLowerCase();
+    if (!liveAddr) {
+        throw new Error(
+            "MiniPay didn't return an authorized account. Reopen Call Me Yours from inside MiniPay and try again.",
+        );
+    }
+    if (liveAddr !== wanted) {
+        throw new Error(
+            `Wallet account mismatch. MiniPay is signed in as ${liveAddr} but this action is for ${wanted}. Close and reopen Call Me Yours in MiniPay so it refreshes the active account.`,
+        );
+    }
+
     const wallet = getWalletClient();
     const tx = {
         account,
@@ -101,12 +127,10 @@ async function writeContract(
         to: address,
         data,
         type: "legacy" as const,
-        ...(opts.skipFeeCurrency ? {} : { feeCurrency: USDM_ADAPTER }),
+        feeCurrency: USDM_ADAPTER,
     };
-    // DEBUG: dump the full transaction request before handing it to the
-    // wallet. Stringify to expand so BigInt values don't collapse to
-    // "[object Object]" in some browsers. Remove with the skipFeeCurrency
-    // flag once debugging is done.
+    // Keep the tx dump while we're stabilizing the MiniPay write path; it's
+    // cheap and high-signal when an error surfaces. Remove once stable.
     // eslint-disable-next-line no-console
     console.log("[writeContract] sending tx:", {
         account: tx.account,
@@ -114,8 +138,8 @@ async function writeContract(
         to: tx.to,
         data: tx.data,
         type: tx.type,
-        feeCurrency: "feeCurrency" in tx ? tx.feeCurrency : "<omitted (CELO gas)>",
-        skipFeeCurrency: Boolean(opts.skipFeeCurrency),
+        feeCurrency: tx.feeCurrency,
+        liveAddr,
     });
     return wallet.sendTransaction(tx);
 }
@@ -153,12 +177,7 @@ export async function acceptRequest(account: Address, sender: Address): Promise<
         functionName: "acceptRequest",
         args: [getAddress(sender)],
     });
-    // DEBUG: omit feeCurrency so gas is paid in CELO. If this succeeds, the
-    // "Permission denied" on the USDm path is a fee-currency issue, not a
-    // contract revert. Revert this flag before shipping.
-    return writeContract(getAddress(account), CMY_ADDRESS, data, {
-        skipFeeCurrency: true,
-    });
+    return writeContract(getAddress(account), CMY_ADDRESS, data);
 }
 
 export async function declineRequest(account: Address, sender: Address): Promise<Hash> {

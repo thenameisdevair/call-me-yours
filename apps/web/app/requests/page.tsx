@@ -10,7 +10,7 @@ import {
     acceptRequest as acceptRequestTx,
     declineRequest as declineRequestTx,
 } from "@/lib/contracts";
-import { checkTransactionSuccess, checkUSDmBalance } from "@/lib/viem";
+import { checkTransactionSuccess } from "@/lib/viem";
 import { formatTxError } from "@/lib/txError";
 import { getSupabase } from "@/lib/supabase";
 import type { ConnectionRequest, Profile } from "@/lib/database.types";
@@ -88,24 +88,13 @@ export default function RequestsPage() {
         if (!me) return;
         setActionError(null);
         setBusy({ address: req.sender, action: "accept" });
-        let step: "preflight" | "tx" | "confirm" | "match" | "update" = "preflight";
+        let step: "tx" | "confirm" | "match" | "update" = "tx";
         try {
-            // Preflight: accept pays gas in USDm. If the wallet has zero USDm
-            // the Celo node refuses the tx with an opaque "Permission denied"
-            // once MiniPay forwards it — catch that here with a specific hint
-            // instead of punting the user to a confusing wallet sheet.
-            const meChecksum = getAddress(me);
-            const bal = await checkUSDmBalance(meChecksum);
-            if (bal === 0n) {
-                throw new Error(
-                    "Your wallet has no USDm. Gas on Celo is paid in USDm here — add a few cents of USDm in MiniPay, then try again.",
-                );
-            }
-
             step = "tx";
             // Normalize to EIP-55 checksum form before hitting the contract.
             // DB stores lowercased addresses, but the contract's msg.sender
             // arrives checksummed — keep both sides consistent via viem.
+            const meChecksum = getAddress(me);
             const senderChecksum = getAddress(req.sender);
             const txHash = await acceptRequestTx(meChecksum, senderChecksum);
 
@@ -157,19 +146,11 @@ export default function RequestsPage() {
         if (!me) return;
         setActionError(null);
         setBusy({ address: req.sender, action: "decline" });
-        let step: "preflight" | "tx" | "confirm" | "update" = "preflight";
+        let step: "tx" | "confirm" | "update" = "tx";
         try {
-            const meChecksum = getAddress(me);
-            const bal = await checkUSDmBalance(meChecksum);
-            if (bal === 0n) {
-                throw new Error(
-                    "Your wallet has no USDm. Gas on Celo is paid in USDm here — add a few cents of USDm in MiniPay, then try again.",
-                );
-            }
-
             step = "tx";
             const txHash = await declineRequestTx(
-                meChecksum,
+                getAddress(me),
                 getAddress(req.sender)
             );
 

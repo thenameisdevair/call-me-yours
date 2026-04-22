@@ -1,29 +1,33 @@
-// Shared transaction-error normalizer for MiniPay / Celo writes.
+// Transaction-error normalizer for MiniPay / Celo writes.
 //
-// viem wraps RPC / wallet errors in nested `cause` chains; the surface
-// `error.message` is often the opaque top-level ("An unknown RPC error
-// occurred.") while the actionable text lives several layers down in
-// `shortMessage` / `details` / `data.message`. This walks the chain, picks
-// the most specific string, and maps known node-level failure modes to
-// something a user can act on.
+// Goal: surface the actual error — never rewrite it into a guess. The only
+// transformations we do are:
+//   1. User-rejection (EIP-1193 code 4001) → friendly "you cancelled" copy.
+//   2. Append an accurate hint for a small number of specific, well-known
+//      wallet errors (code 4100 unauthorized, code 4902 wrong chain). These
+//      hints are additive — the raw text is always present.
+// Everything else passes through verbatim so the real cause is visible.
 
 export type TxFlow = "accept" | "decline" | "send" | "gift" | "milestone";
-
 export type TxStep = string;
 
-interface ExtractedError {
+interface Extracted {
+    code: number | null;
     top: string;
     short: string | null;
     details: string | null;
+    name: string | null;
     all: string[];
 }
 
-function extract(e: unknown): ExtractedError {
+function extract(e: unknown): Extracted {
     const seen = new Set<unknown>();
     const all: string[] = [];
     let cur: unknown = e;
     let short: string | null = null;
     let details: string | null = null;
+    let name: string | null = null;
+    let code: number | null = null;
     let top = "";
 
     while (cur && !seen.has(cur)) {
@@ -42,10 +46,14 @@ function extract(e: unknown): ExtractedError {
                 details ??= o.details;
                 all.push(o.details);
             }
+            if (typeof o.name === "string" && !name) name = o.name;
+            if (typeof o.code === "number" && code === null) code = o.code;
             const data = o.data;
             if (data && typeof data === "object") {
                 const dm = (data as Record<string, unknown>).message;
                 if (typeof dm === "string") all.push(dm);
+                const dc = (data as Record<string, unknown>).code;
+                if (typeof dc === "number" && code === null) code = dc;
             }
             cur = o.cause;
         } else {
@@ -55,52 +63,26 @@ function extract(e: unknown): ExtractedError {
 
     if (!top && typeof e === "string") top = e;
     if (!top) top = "Something went wrong";
-    return { top, short, details, all };
+    return { code, top, short, details, name, all };
 }
 
 export function isUserRejection(e: unknown): boolean {
-    const { all } = extract(e);
-    // Tight: only match wording MiniPay / injected wallets actually use when
-    // the user dismisses the sheet. Do NOT match bare "denied" — Celo node
-    // rejects come back as "Permission denied" and are NOT user cancels.
+    const { code, all, name } = extract(e);
+    if (code === 4001) return true;
+    if (name === "UserRejectedRequestError") return true;
+    // Fallback for wallets that don't set code: tight regex on wording.
     const needle =
         /user rejected|user denied|rejected the request|user cancel?led/i;
     return all.some((m) => needle.test(m));
 }
 
-export function isFeeCurrencyError(e: unknown): boolean {
-    const { all } = extract(e);
-    // Celo node replies with "Permission denied" / "insufficient funds for
-    // gas" / "fee currency not whitelisted" / "gateway fee" depending on
-    // version when the `feeCurrency` is wrong, unregistered, or the wallet
-    // has no balance of it to cover gas.
-    const needle =
-        /permission denied|fee currency|feecurrency|not whitelisted|insufficient funds for gas|gateway fee/i;
-    return all.some((m) => needle.test(m));
-}
-
-export function formatTxError(
-    step: TxStep,
-    e: unknown,
-    _flow: TxFlow = "send",
-): string {
+export function formatTxError(step: TxStep, e: unknown, _flow: TxFlow = "send"): string {
     if (isUserRejection(e)) {
         return "You cancelled the confirmation in your wallet.";
     }
 
-    const { top, short, details } = extract(e);
+    const { code, top, short, details, name } = extract(e);
     const best = short ?? details ?? top;
-
-    if (isFeeCurrencyError(e)) {
-        // Gas on Celo is paid in USDm here; the node refuses the tx when the
-        // fee currency isn't accepted or the wallet has no USDm at all. Make
-        // the remedy concrete.
-        return (
-            "Celo couldn't charge gas in USDm for this transaction. " +
-            "Make sure your MiniPay wallet has a small USDm balance (even " +
-            "a few cents covers gas), then try again."
-        );
-    }
 
     const prefix =
         step === "tx"
@@ -115,5 +97,18 @@ export function formatTxError(
                     ? "Can't start this transaction"
                     : "Something went wrong";
 
-    return `${prefix}: ${best}`;
+    const codeTag = code !== null ? ` [${code}]` : "";
+    const nameTag = name && name !== "Error" ? ` (${name})` : "";
+    let msg = `${prefix}${codeTag}${nameTag}: ${best}`;
+
+    // Actionable, code-specific hints. Additive only — raw text stays above.
+    if (code === 4100 || name === "UnauthorizedProviderError") {
+        msg +=
+            "\n\nThis usually means MiniPay is signed into a different wallet than the one this account is tied to. Close and reopen Call Me Yours from inside MiniPay so it re-authorizes, then try again.";
+    } else if (code === 4902) {
+        msg +=
+            "\n\nYour wallet isn't on the Celo network. Switch to Celo and try again.";
+    }
+
+    return msg;
 }
