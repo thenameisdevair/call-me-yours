@@ -218,6 +218,27 @@ export default function RequestsPage() {
                     </div>
                 </header>
 
+                {/* DEBUG: raw self-transfer to verify wallet can sign any tx */}
+                {me && (
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            try {
+                                const hash = await window.ethereum!.request({
+                                    method: "eth_sendTransaction",
+                                    params: [{ from: me, to: me, value: "0x0", gas: "0x5208" }],
+                                });
+                                alert(`Success: ${hash}`);
+                            } catch (e) {
+                                alert(`Error: ${serializeErr(e)}`);
+                            }
+                        }}
+                        className="mb-4 w-full rounded-lg border border-yellow-400 bg-yellow-50 px-3 py-2 text-xs font-medium text-yellow-800 hover:bg-yellow-100"
+                    >
+                        [DEBUG] Test Wallet — zero-value self-transfer
+                    </button>
+                )}
+
                 {actionError && (
                     <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
                         <p className="whitespace-pre-wrap">{actionError}</p>
