@@ -87,8 +87,12 @@ export default function RequestsPage() {
         if (!me) return;
         setActionError(null);
         setBusy({ address: req.sender, action: "accept" });
+        let step: "tx" | "confirm" | "match" | "update" = "tx";
         try {
+            step = "tx";
             const txHash = await acceptRequestTx(me as Address, req.sender as Address);
+
+            step = "confirm";
             const ok = await checkTransactionSuccess(txHash);
             if (!ok) throw new Error("Transaction failed on-chain");
 
@@ -96,20 +100,18 @@ export default function RequestsPage() {
             // Matches table has a symmetric pair — store in a deterministic
             // order so (user_a, user_b) uniqueness is stable regardless of who
             // accepted.
-            const [userA, userB] =
-                req.sender.toLowerCase() < me ? [req.sender, me] : [me, req.sender];
+            const senderLc = req.sender.toLowerCase();
+            const [userA, userB] = senderLc < me ? [senderLc, me] : [me, senderLc];
 
+            step = "match";
             const { data: inserted, error: insertErr } = await supabase
                 .from("matches")
-                .insert({
-                    user_a: userA.toLowerCase(),
-                    user_b: userB.toLowerCase(),
-                    tx_hash: txHash,
-                })
+                .insert({ user_a: userA, user_b: userB, tx_hash: txHash })
                 .select("id")
                 .single();
             if (insertErr) throw insertErr;
 
+            step = "update";
             const { error: updErr } = await supabase
                 .from("connection_requests")
                 .update({
@@ -124,11 +126,11 @@ export default function RequestsPage() {
             setJustMatched({
                 matchId: inserted.id,
                 partner: accepted?.sender ?? null,
-                partnerAddr: req.sender.toLowerCase(),
+                partnerAddr: senderLc,
             });
         } catch (e) {
-            const msg = e instanceof Error ? e.message : "Could not accept";
-            if (!/reject|denied|cancel/i.test(msg)) setActionError(msg);
+            console.error(`[accept:${step}]`, e);
+            setActionError(formatStepError(step, e, "accept"));
         } finally {
             setBusy(null);
         }
@@ -138,11 +140,16 @@ export default function RequestsPage() {
         if (!me) return;
         setActionError(null);
         setBusy({ address: req.sender, action: "decline" });
+        let step: "tx" | "confirm" | "update" = "tx";
         try {
+            step = "tx";
             const txHash = await declineRequestTx(me as Address, req.sender as Address);
+
+            step = "confirm";
             const ok = await checkTransactionSuccess(txHash);
             if (!ok) throw new Error("Transaction failed on-chain");
 
+            step = "update";
             const supabase = getSupabase();
             const { error: updErr } = await supabase
                 .from("connection_requests")
@@ -155,8 +162,8 @@ export default function RequestsPage() {
 
             setItems((xs) => xs.filter((x) => x.request.id !== req.id));
         } catch (e) {
-            const msg = e instanceof Error ? e.message : "Could not decline";
-            if (!/reject|denied|cancel/i.test(msg)) setActionError(msg);
+            console.error(`[decline:${step}]`, e);
+            setActionError(formatStepError(step, e, "decline"));
         } finally {
             setBusy(null);
         }
@@ -307,6 +314,35 @@ export default function RequestsPage() {
 
 function shorten(addr: string): string {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+function formatStepError(
+    step: string,
+    e: unknown,
+    flow: "accept" | "decline"
+): string {
+    const raw =
+        e instanceof Error
+            ? e.message
+            : typeof e === "object" && e !== null && "message" in e
+              ? String((e as { message: unknown }).message)
+              : String(e);
+    // MiniPay / injected wallets return a user-rejection error when the user
+    // dismisses the signing sheet. Say so plainly instead of swallowing it.
+    if (/user (rejected|denied)|rejected the request|user cancelled/i.test(raw)) {
+        return flow === "accept"
+            ? "You cancelled the confirmation in your wallet."
+            : "You cancelled the confirmation in your wallet.";
+    }
+    const prefix =
+        step === "tx"
+            ? "Wallet error"
+            : step === "confirm"
+              ? "Transaction did not confirm"
+              : step === "match"
+                ? "Could not save the match"
+                : "Could not update the request";
+    return `${prefix}: ${raw}`;
 }
 
 function MatchCelebration({
