@@ -1,4 +1,4 @@
-import { encodeFunctionData, type Address, type Hash } from "viem";
+import { encodeFunctionData, getAddress, type Address, type Hash } from "viem";
 import { celo } from "viem/chains";
 import { getWalletClient, USDM_ADAPTER, USDM_ADDRESS } from "./viem";
 
@@ -109,6 +109,12 @@ export async function approveUSDm(account: Address, amount: bigint): Promise<Has
     return writeContract(account, USDM_ADDRESS, data);
 }
 
+// Every address handed to encodeFunctionData is normalized through
+// viem.getAddress() first. Addresses in CMY are stored lowercased in Supabase
+// and the DB convention matches what the contract emits, but viem rejects
+// mixed-case non-checksummed addresses (e.g. the sender's wallet hex copied
+// verbatim from an explorer), so normalizing at the boundary keeps the call
+// site forgiving. getAddress() also validates the hex length and chars.
 export async function sendConnectionRequest(
     account: Address,
     recipient: Address,
@@ -116,27 +122,27 @@ export async function sendConnectionRequest(
     const data = encodeFunctionData({
         abi: CMY_ABI,
         functionName: "sendConnectionRequest",
-        args: [recipient],
+        args: [getAddress(recipient)],
     });
-    return writeContract(account, CMY_ADDRESS, data);
+    return writeContract(getAddress(account), CMY_ADDRESS, data);
 }
 
 export async function acceptRequest(account: Address, sender: Address): Promise<Hash> {
     const data = encodeFunctionData({
         abi: CMY_ABI,
         functionName: "acceptRequest",
-        args: [sender],
+        args: [getAddress(sender)],
     });
-    return writeContract(account, CMY_ADDRESS, data);
+    return writeContract(getAddress(account), CMY_ADDRESS, data);
 }
 
 export async function declineRequest(account: Address, sender: Address): Promise<Hash> {
     const data = encodeFunctionData({
         abi: CMY_ABI,
         functionName: "declineRequest",
-        args: [sender],
+        args: [getAddress(sender)],
     });
-    return writeContract(account, CMY_ADDRESS, data);
+    return writeContract(getAddress(account), CMY_ADDRESS, data);
 }
 
 export async function sendGift(
@@ -148,9 +154,9 @@ export async function sendGift(
     const data = encodeFunctionData({
         abi: CMY_ABI,
         functionName: "sendGift",
-        args: [recipient, giftType, amount],
+        args: [getAddress(recipient), giftType, amount],
     });
-    return writeContract(account, CMY_ADDRESS, data);
+    return writeContract(getAddress(account), CMY_ADDRESS, data);
 }
 
 export async function recordMilestone(
@@ -161,7 +167,7 @@ export async function recordMilestone(
     const data = encodeFunctionData({
         abi: CMY_ABI,
         functionName: "recordMilestone",
-        args: [matchPartner, milestoneId],
+        args: [getAddress(matchPartner), milestoneId],
     });
-    return writeContract(account, CMY_ADDRESS, data);
+    return writeContract(getAddress(account), CMY_ADDRESS, data);
 }

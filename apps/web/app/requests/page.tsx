@@ -4,7 +4,7 @@ import { ArrowLeft, Check, Heart, Loader2, MessageCircle, X } from "lucide-react
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import type { Address } from "viem";
+import { getAddress, type Address } from "viem";
 import { useMiniPay } from "@/hooks/useMiniPay";
 import {
     acceptRequest as acceptRequestTx,
@@ -90,7 +90,12 @@ export default function RequestsPage() {
         let step: "tx" | "confirm" | "match" | "update" = "tx";
         try {
             step = "tx";
-            const txHash = await acceptRequestTx(me as Address, req.sender as Address);
+            // Normalize to EIP-55 checksum form before hitting the contract.
+            // DB stores lowercased addresses, but the contract's msg.sender
+            // arrives checksummed — keep both sides consistent via viem.
+            const senderChecksum = getAddress(req.sender);
+            const meChecksum = getAddress(me);
+            const txHash = await acceptRequestTx(meChecksum, senderChecksum);
 
             step = "confirm";
             const ok = await checkTransactionSuccess(txHash);
@@ -143,7 +148,10 @@ export default function RequestsPage() {
         let step: "tx" | "confirm" | "update" = "tx";
         try {
             step = "tx";
-            const txHash = await declineRequestTx(me as Address, req.sender as Address);
+            const txHash = await declineRequestTx(
+                getAddress(me),
+                getAddress(req.sender)
+            );
 
             step = "confirm";
             const ok = await checkTransactionSuccess(txHash);
