@@ -10,7 +10,8 @@ import {
     acceptRequest as acceptRequestTx,
     declineRequest as declineRequestTx,
 } from "@/lib/contracts";
-import { checkTransactionSuccess } from "@/lib/viem";
+import { checkTransactionSuccess, checkUSDmBalance } from "@/lib/viem";
+import { formatTxError } from "@/lib/txError";
 import { getSupabase } from "@/lib/supabase";
 import type { ConnectionRequest, Profile } from "@/lib/database.types";
 
@@ -87,14 +88,25 @@ export default function RequestsPage() {
         if (!me) return;
         setActionError(null);
         setBusy({ address: req.sender, action: "accept" });
-        let step: "tx" | "confirm" | "match" | "update" = "tx";
+        let step: "preflight" | "tx" | "confirm" | "match" | "update" = "preflight";
         try {
+            // Preflight: accept pays gas in USDm. If the wallet has zero USDm
+            // the Celo node refuses the tx with an opaque "Permission denied"
+            // once MiniPay forwards it — catch that here with a specific hint
+            // instead of punting the user to a confusing wallet sheet.
+            const meChecksum = getAddress(me);
+            const bal = await checkUSDmBalance(meChecksum);
+            if (bal === 0n) {
+                throw new Error(
+                    "Your wallet has no USDm. Gas on Celo is paid in USDm here — add a few cents of USDm in MiniPay, then try again.",
+                );
+            }
+
             step = "tx";
             // Normalize to EIP-55 checksum form before hitting the contract.
             // DB stores lowercased addresses, but the contract's msg.sender
             // arrives checksummed — keep both sides consistent via viem.
             const senderChecksum = getAddress(req.sender);
-            const meChecksum = getAddress(me);
             const txHash = await acceptRequestTx(meChecksum, senderChecksum);
 
             step = "confirm";
@@ -135,7 +147,7 @@ export default function RequestsPage() {
             });
         } catch (e) {
             console.error(`[accept:${step}]`, e);
-            setActionError(formatStepError(step, e, "accept"));
+            setActionError(formatTxError(step, e, "accept"));
         } finally {
             setBusy(null);
         }
@@ -145,11 +157,19 @@ export default function RequestsPage() {
         if (!me) return;
         setActionError(null);
         setBusy({ address: req.sender, action: "decline" });
-        let step: "tx" | "confirm" | "update" = "tx";
+        let step: "preflight" | "tx" | "confirm" | "update" = "preflight";
         try {
+            const meChecksum = getAddress(me);
+            const bal = await checkUSDmBalance(meChecksum);
+            if (bal === 0n) {
+                throw new Error(
+                    "Your wallet has no USDm. Gas on Celo is paid in USDm here — add a few cents of USDm in MiniPay, then try again.",
+                );
+            }
+
             step = "tx";
             const txHash = await declineRequestTx(
-                getAddress(me),
+                meChecksum,
                 getAddress(req.sender)
             );
 
@@ -171,7 +191,7 @@ export default function RequestsPage() {
             setItems((xs) => xs.filter((x) => x.request.id !== req.id));
         } catch (e) {
             console.error(`[decline:${step}]`, e);
-            setActionError(formatStepError(step, e, "decline"));
+            setActionError(formatTxError(step, e, "decline"));
         } finally {
             setBusy(null);
         }
@@ -322,35 +342,6 @@ export default function RequestsPage() {
 
 function shorten(addr: string): string {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
-
-function formatStepError(
-    step: string,
-    e: unknown,
-    flow: "accept" | "decline"
-): string {
-    const raw =
-        e instanceof Error
-            ? e.message
-            : typeof e === "object" && e !== null && "message" in e
-              ? String((e as { message: unknown }).message)
-              : String(e);
-    // MiniPay / injected wallets return a user-rejection error when the user
-    // dismisses the signing sheet. Say so plainly instead of swallowing it.
-    if (/user (rejected|denied)|rejected the request|user cancelled/i.test(raw)) {
-        return flow === "accept"
-            ? "You cancelled the confirmation in your wallet."
-            : "You cancelled the confirmation in your wallet.";
-    }
-    const prefix =
-        step === "tx"
-            ? "Wallet error"
-            : step === "confirm"
-              ? "Transaction did not confirm"
-              : step === "match"
-                ? "Could not save the match"
-                : "Could not update the request";
-    return `${prefix}: ${raw}`;
 }
 
 function MatchCelebration({
