@@ -128,17 +128,6 @@ async function writeContract(
     const tx = opts.skipFeeCurrency
         ? ({ account, chain: celo, to: address, data, type: "legacy" as const } as const)
         : ({ account, chain: celo, to: address, data, feeCurrency: USDM_ADAPTER } as const);
-
-    // eslint-disable-next-line no-console
-    console.log("[writeContract] sending tx:", {
-        account: tx.account,
-        chain: tx.chain.id,
-        to: tx.to,
-        data: tx.data,
-        type: "type" in tx ? tx.type : "<auto — CIP-64>",
-        feeCurrency: "feeCurrency" in tx ? tx.feeCurrency : "<omitted — CELO gas>",
-        liveAddr,
-    });
     return wallet.sendTransaction(tx);
 }
 
