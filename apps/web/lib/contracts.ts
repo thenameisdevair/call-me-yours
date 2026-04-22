@@ -82,18 +82,21 @@ export const USDM_ERC20_ABI = [
     },
 ] as const;
 
-// All writes use legacy tx + feeCurrency USDM_ADAPTER so users pay gas in
-// USDm. This is the CMY non-negotiable rule.
+// Two write paths:
+//
+// skipFeeCurrency: true  → type "legacy" (0x0), no feeCurrency. CELO covers
+//   gas. Used for acceptRequest / declineRequest which move no tokens.
+//
+// skipFeeCurrency: false → feeCurrency: USDM_ADAPTER, no explicit type. viem
+//   detects feeCurrency on the celo chain and serializes as CIP-64 (0x7b) so
+//   MiniPay charges gas in USDm. Setting type: "legacy" here would be
+//   contradictory — a legacy tx cannot carry feeCurrency — so we omit it and
+//   let viem pick the right envelope.
 //
 // "Permission denied" (EIP-1193 code 4100 / viem UnauthorizedProviderError)
 // from MiniPay means the provider hasn't authorized the `from` account for
-// eth_sendTransaction. useMiniPay only calls eth_requestAccounts once at
-// mount; if the session drifts (chain switch, long-lived tab, wallet-side
-// re-auth) the cached address becomes stale. Before every write we re-query
-// the provider's live accounts and fail fast with a clear message if the
-// caller's account isn't the one the wallet currently authorizes. This also
-// re-primes MiniPay for the pending sendTransaction call on wallets that
-// scope authorization per-request.
+// eth_sendTransaction. Before every write we re-query the provider's live
+// accounts and fail fast if the caller's account has drifted.
 async function writeContract(
     account: Address,
     address: Address,
@@ -122,24 +125,18 @@ async function writeContract(
     }
 
     const wallet = getWalletClient();
-    const tx = {
-        account,
-        chain: celo,
-        to: address,
-        data,
-        type: "legacy" as const,
-        ...(opts.skipFeeCurrency ? {} : { feeCurrency: USDM_ADAPTER }),
-    };
-    // Keep the tx dump while we're stabilizing the MiniPay write path; it's
-    // cheap and high-signal when an error surfaces. Remove once stable.
+    const tx = opts.skipFeeCurrency
+        ? ({ account, chain: celo, to: address, data, type: "legacy" as const } as const)
+        : ({ account, chain: celo, to: address, data, feeCurrency: USDM_ADAPTER } as const);
+
     // eslint-disable-next-line no-console
     console.log("[writeContract] sending tx:", {
         account: tx.account,
         chain: tx.chain.id,
         to: tx.to,
         data: tx.data,
-        type: tx.type,
-        feeCurrency: "feeCurrency" in tx ? (tx as { feeCurrency: string }).feeCurrency : "<omitted — CELO gas>",
+        type: "type" in tx ? tx.type : "<auto — CIP-64>",
+        feeCurrency: "feeCurrency" in tx ? tx.feeCurrency : "<omitted — CELO gas>",
         liveAddr,
     });
     return wallet.sendTransaction(tx);
