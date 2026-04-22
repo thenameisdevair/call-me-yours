@@ -32,6 +32,10 @@ export default function RequestsPage() {
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState<Busy>(null);
     const [actionError, setActionError] = useState<string | null>(null);
+    // DEBUG: raw error payload for the last failed accept/decline action.
+    // Rendered under the friendly message as a monospace JSON block to aid
+    // diagnosis of opaque wallet/RPC errors. Temporary.
+    const [actionErrorRaw, setActionErrorRaw] = useState<string | null>(null);
     const [justMatched, setJustMatched] = useState<{
         matchId: string;
         partner: Profile | null;
@@ -87,6 +91,7 @@ export default function RequestsPage() {
     async function onAccept(req: ConnectionRequest) {
         if (!me) return;
         setActionError(null);
+        setActionErrorRaw(null);
         setBusy({ address: req.sender, action: "accept" });
         let step: "tx" | "confirm" | "match" | "update" = "tx";
         try {
@@ -137,6 +142,7 @@ export default function RequestsPage() {
         } catch (e) {
             console.error(`[accept:${step}]`, e);
             setActionError(formatTxError(step, e, "accept"));
+            setActionErrorRaw(serializeErr(e));
         } finally {
             setBusy(null);
         }
@@ -145,6 +151,7 @@ export default function RequestsPage() {
     async function onDecline(req: ConnectionRequest) {
         if (!me) return;
         setActionError(null);
+        setActionErrorRaw(null);
         setBusy({ address: req.sender, action: "decline" });
         let step: "tx" | "confirm" | "update" = "tx";
         try {
@@ -173,6 +180,7 @@ export default function RequestsPage() {
         } catch (e) {
             console.error(`[decline:${step}]`, e);
             setActionError(formatTxError(step, e, "decline"));
+            setActionErrorRaw(serializeErr(e));
         } finally {
             setBusy(null);
         }
@@ -211,9 +219,14 @@ export default function RequestsPage() {
                 </header>
 
                 {actionError && (
-                    <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
-                        {actionError}
-                    </p>
+                    <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                        <p className="whitespace-pre-wrap">{actionError}</p>
+                        {actionErrorRaw && (
+                            <pre className="mt-2 max-h-64 overflow-auto rounded bg-red-100/80 p-2 font-mono text-[10px] leading-tight text-red-900">
+                                {actionErrorRaw}
+                            </pre>
+                        )}
+                    </div>
                 )}
                 {error && (
                     <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -323,6 +336,51 @@ export default function RequestsPage() {
 
 function shorten(addr: string): string {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+// DEBUG helper: walks an error object (including `cause` chain and enumerable
+// plus known-non-enumerable viem fields like `shortMessage`, `details`,
+// `code`, `data`) and serializes to JSON. Handles BigInt and circular refs.
+// Temporary — remove once wallet-path errors stabilize.
+function serializeErr(e: unknown): string {
+    const seen = new WeakSet<object>();
+    const pickFields = [
+        "name",
+        "message",
+        "shortMessage",
+        "details",
+        "code",
+        "version",
+        "docsPath",
+        "metaMessages",
+        "data",
+        "stack",
+    ] as const;
+    function norm(v: unknown): unknown {
+        if (v == null) return v;
+        if (typeof v === "bigint") return `${v.toString()}n`;
+        if (typeof v === "function") return `[Function ${v.name || "anon"}]`;
+        if (typeof v !== "object") return v;
+        if (seen.has(v as object)) return "[Circular]";
+        seen.add(v as object);
+        if (Array.isArray(v)) return v.map(norm);
+        const o = v as Record<string, unknown>;
+        const out: Record<string, unknown> = {};
+        for (const k of pickFields) {
+            if (k in o) out[k] = norm(o[k]);
+        }
+        // Capture any extra own properties not in the pick list.
+        for (const k of Object.keys(o)) {
+            if (!(k in out) && k !== "cause") out[k] = norm(o[k]);
+        }
+        if ("cause" in o && o.cause) out.cause = norm(o.cause);
+        return out;
+    }
+    try {
+        return JSON.stringify(norm(e), null, 2);
+    } catch (serErr) {
+        return `<<failed to serialize error: ${String(serErr)}>>`;
+    }
 }
 
 function MatchCelebration({
