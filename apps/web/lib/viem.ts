@@ -18,9 +18,12 @@ export const USDM_ADDRESS =
     (process.env.NEXT_PUBLIC_USDM_ADDRESS as Address) ??
     "0x765DE816845861e75A25fCA122bb6898B8B1282a";
 
+// USDm's CIP-64 fee-currency adapter. This is NOT the USDm token address —
+// Celo mainnet only accepts registered adapter contracts as `feeCurrency`;
+// the raw token is rejected by the node with "Permission denied".
 export const USDM_ADAPTER =
     (process.env.NEXT_PUBLIC_USDM_ADAPTER as Address) ??
-    "0x765DE816845861e75A25fCA122bb6898B8B1282a";
+    "0x2F25deB3848C207fc8E0c34035B3Ba7fC157602B";
 
 const RPC = process.env.NEXT_PUBLIC_CELO_RPC ?? "https://forno.celo.org";
 
