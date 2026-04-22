@@ -98,6 +98,7 @@ async function writeContract(
     account: Address,
     address: Address,
     data: `0x${string}`,
+    opts: { skipFeeCurrency?: boolean } = {},
 ): Promise<Hash> {
     if (typeof window === "undefined" || !window.ethereum) {
         throw new Error("No injected wallet found");
@@ -127,7 +128,7 @@ async function writeContract(
         to: address,
         data,
         type: "legacy" as const,
-        feeCurrency: USDM_ADAPTER,
+        ...(opts.skipFeeCurrency ? {} : { feeCurrency: USDM_ADAPTER }),
     };
     // Keep the tx dump while we're stabilizing the MiniPay write path; it's
     // cheap and high-signal when an error surfaces. Remove once stable.
@@ -138,7 +139,7 @@ async function writeContract(
         to: tx.to,
         data: tx.data,
         type: tx.type,
-        feeCurrency: tx.feeCurrency,
+        feeCurrency: "feeCurrency" in tx ? (tx as { feeCurrency: string }).feeCurrency : "<omitted — CELO gas>",
         liveAddr,
     });
     return wallet.sendTransaction(tx);
@@ -177,7 +178,7 @@ export async function acceptRequest(account: Address, sender: Address): Promise<
         functionName: "acceptRequest",
         args: [getAddress(sender)],
     });
-    return writeContract(getAddress(account), CMY_ADDRESS, data);
+    return writeContract(getAddress(account), CMY_ADDRESS, data, { skipFeeCurrency: true });
 }
 
 export async function declineRequest(account: Address, sender: Address): Promise<Hash> {
@@ -186,7 +187,7 @@ export async function declineRequest(account: Address, sender: Address): Promise
         functionName: "declineRequest",
         args: [getAddress(sender)],
     });
-    return writeContract(getAddress(account), CMY_ADDRESS, data);
+    return writeContract(getAddress(account), CMY_ADDRESS, data, { skipFeeCurrency: true });
 }
 
 export async function sendGift(
